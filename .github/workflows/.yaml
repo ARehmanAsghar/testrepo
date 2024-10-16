@@ -1,1 +1,60 @@
+name: CI/CD Pipeline
 
+on:
+  push:
+    branches:
+      - dev  # Change to your default branch if necessary
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build Docker image
+        run: |
+          docker build -t vitalimg:${{ github.sha }} .
+          docker tag vitalimg:${{ github.sha }} 977098996766.dkr.ecr.ap-south-1.amazonaws.com/vitalimg:${{ github.sha }}
+
+      - name: Push Docker image to ECR
+        run: |
+          docker push 977098996766.dkr.ecr.ap-south-1.amazonaws.com/vitalimg:${{ github.sha }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build  # Ensure the build job runs after the build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Configure AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Update ECS service
+        run: |
+          # Define variables
+          CLUSTER_NAME="vitalcluster12"
+          SERVICE_NAME="vitalservice"
+          TASK_DEFINITION="vitaltask"
+          IMAGE_URI="977098996766.dkr.ecr.ap-south-1.amazonaws.com/vitalimg:${{ github.sha }}"
+
+          # # Register a new task definition revision with the updated image
+          # aws ecs register-task-definition \
+          #   --family $TASK_DEFINITION \
+          #   --container-definitions "[{\"name\":\"<container-name>\",\"image\":\"$IMAGE_URI\",\"essential\":true}]"  # Replace <container-name> with your actual container name
+
+          # # Update the ECS service to use the new task definition
+          # aws ecs update-service \
+          #   --cluster $CLUSTER_NAME \
+          #   --service $SERVICE_NAME \
+          #   --force-new-deployment
